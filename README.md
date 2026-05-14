@@ -1,87 +1,41 @@
-# ObjectStorage
+# Distributed Object Storage API
 
-Distributed File Storage API built with Go, Echo v4, PostgreSQL, MinIO, and NATS.
+A production-grade, distributed file storage API built with Go, implementing Clean Architecture. This project provides a robust system for managing chunked file uploads directly to MinIO (S3-compatible) and handles event-driven background processing with NATS.
 
-## Architecture
+## Key Features
 
-```
-Client → API Server (Echo v4) → PostgreSQL + MinIO + NATS
-                                                    ↓
-                                             Worker (NATS consumer)
-```
-
-## Quick Start
-
-```bash
-# Start infrastructure
-make docker-up
-
-# Run database migrations
-make migrate-up
-
-# Start server
-make run
-```
-
-## Project Structure
-
-```
-cmd/                   # Application entry point
-  main.go
-
-config/                # Environment-based configuration
-  config.go
-
-internal/              # Private application code
-  handler/             # HTTP transport layer (Echo handlers)
-  service/             # Business logic / use cases
-  repository/          # Data access layer (interfaces + PostgreSQL)
-  middleware/          # HTTP middleware (JWT auth)
-  token/               # JWT token manager
-  model/               # Domain entities (User, File, FileChunk)
-
-sqlc/                  # Generated database queries (sqlc)
-  query/               # SQL query definitions
-
-pkg/                   # Shared infrastructure clients
-  postgres/            # PostgreSQL connection pool
-  minio/               # MinIO / S3 client
-  nats/                # NATS messaging client
-
-migrations/            # SQL migration files
-```
-
-## Auth Endpoints
-
-| Method | Endpoint               | Auth     | Description              |
-|--------|------------------------|----------|--------------------------|
-| POST   | `/api/v1/auth/register`| No       | Register new user        |
-| POST   | `/api/v1/auth/login`   | No       | Login with credentials   |
-| POST   | `/api/v1/auth/refresh` | No       | Refresh token pair       |
-| GET    | `/api/v1/auth/me`      | Bearer   | Get current user profile |
-| GET    | `/health`              | No       | Health check             |
-
-## Configuration
-
-Copy `.env.example` to `.env` and adjust values:
-
-```bash
-cp .env.example .env
-```
-
-See [.env.example](.env.example) for all available environment variables.
+- **Direct-to-Storage Uploads**: API generates pre-signed PUT URLs for clients to upload file chunks directly to MinIO, reducing server memory usage and bandwidth.
+- **Secure Downloads**: Generates time-limited pre-signed GET URLs for authenticated users to access files.
+- **Multipart Management**: Tracks the status of individual file chunks in PostgreSQL and manages the upload lifecycle.
+- **Event-Driven Processing**: NATS message queues trigger background workers for tasks like chunk assembly after uploads complete.
+- **Clean Architecture**: Strong separation between Handler, Service, and Repository layers using PostgreSQL (`sqlc` + `pgx`).
 
 ## Tech Stack
+- **Go 1.22+**, **Echo v4** (HTTP Framework)
+- **PostgreSQL 16** (`pgx/v5`, `sqlc`)
+- **MinIO** (S3 Storage)
+- **NATS** (Message Queue)
+- **Uber Zap** (Logging), **JWT** (Auth)
 
-- **Router**: [Echo v4](https://echo.labstack.com/)
-- **Database**: PostgreSQL via [pgx/v5](https://github.com/jackc/pgx)
-- **Query Gen**: [sqlc](https://sqlc.dev/)
-- **Object Storage**: MinIO / S3
-- **Messaging**: NATS
-- **Auth**: JWT via [golang-jwt/jwt](https://github.com/golang-jwt/jwt)
-- **Logging**: [zap](https://github.com/uber-go/zap)
-- **Config**: [caarlos0/env](https://github.com/caarlos0/env)
 
-## API Documentation
+## How to Run
 
-See [CONTRACT.md](CONTRACT.md) for the full API contract.
+1. **Start Infrastructure**:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Setup Config**:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Run Migrations**:
+   ```bash
+   migrate -path migrations -database "postgres://objectstorage:objectstorage@localhost:5432/objectstorage?sslmode=disable" up
+   ```
+
+4. **Start the API Server**:
+   ```bash
+   go run cmd/main.go
+   ```
