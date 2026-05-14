@@ -1,0 +1,29 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Object files
+*.o
+*.a
+*.obj
+*.lib
+
+# Editor and IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Environment
+.env
+
+# Go
+vendor/
+go.work
+go.work.sum
