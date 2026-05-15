@@ -10,10 +10,13 @@ type FileStatus string
 
 const (
 	FileStatusUploading  FileStatus = "UPLOADING"
+	FileStatusUploaded   FileStatus = "UPLOADED"
 	FileStatusProcessing FileStatus = "PROCESSING"
 	FileStatusReady      FileStatus = "READY"
 	FileStatusFailed     FileStatus = "FAILED"
 	FileStatusDeleted    FileStatus = "DELETED"
+	FileStatusUnscanned  FileStatus = "UNSCANNED"
+	FileStatusInfected   FileStatus = "INFECTED"
 )
 
 type File struct {
@@ -25,6 +28,8 @@ type File struct {
 	ContentType string     `json:"contentType"`
 	Status      FileStatus `json:"status"`
 	Checksum    string     `json:"checksum,omitempty"`
+	ScanResult  string     `json:"scanResult,omitempty"`
+	ScannedAt   *time.Time `json:"scannedAt,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }
