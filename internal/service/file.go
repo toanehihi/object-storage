@@ -59,7 +59,7 @@ func (s *FileService) GetDownloadURL(ctx context.Context, fileID, ownerID uuid.U
 	}
 
 	expiry := 1 * time.Hour
-	url, err := minio.GenerateDownloadURL(ctx, s.client, s.bucket, file.ObjectKey, expiry)
+	url, err := minio.GenerateDownloadURL(ctx, s.client, s.bucket, file.ObjectKey, file.Filename, expiry)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -34,6 +35,7 @@ func NewUploadHandler(svc *service.UploadService) *UploadHandler {
 
 func (h *UploadHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("", h.initUpload)
+	g.GET("/:fileId/chunks/:chunkIndex/url", h.getChunkUploadURL)
 	g.PUT("/:fileId/chunks/:chunkIndex", h.chunkComplete)
 	g.GET("/:fileId/status", h.status)
 	g.POST("/:fileId/complete", h.complete)
@@ -56,10 +58,38 @@ func (h *UploadHandler) initUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to init upload")
+		c.Logger().Errorf("Failed to init upload: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to init upload: "+err.Error())
 	}
 
 	return c.JSON(http.StatusCreated, response.OK(resp, "upload initialized"))
+}
+
+func (h *UploadHandler) getChunkUploadURL(c echo.Context) error {
+	ownerID := middleware.UserIDFromContext(c)
+
+	fileID, err := uuid.Parse(c.Param("fileId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid file id")
+	}
+
+	chunkIndex, err := strconv.Atoi(c.Param("chunkIndex"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid chunk index")
+	}
+
+	resp, err := h.svc.GetChunkUploadURL(c.Request().Context(), ownerID, fileID, chunkIndex)
+	if errors.Is(err, service.ErrFileNotOwned) {
+		return echo.NewHTTPError(http.StatusNotFound, "file not found")
+	}
+	if errors.Is(err, service.ErrChunkIndexOutOfRange) {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get chunk upload url")
+	}
+
+	return c.JSON(http.StatusOK, response.OK(resp, ""))
 }
 
 func (h *UploadHandler) chunkComplete(c echo.Context) error {
@@ -125,6 +155,6 @@ func (h *UploadHandler) complete(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, response.OK(CompleteUploadResponse{
 		FileID: fileID,
-		Status: "PROCESSING",
-	}, "upload complete, file is being processed"))
+		Status: "READY",
+	}, "upload complete"))
 }

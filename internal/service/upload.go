@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 )
 
 var (
-	ErrUploadIncomplete = errors.New("not all chunks have been uploaded")
-	ErrInvalidChunkSize = errors.New("chunk size must be greater than zero")
+	ErrUploadIncomplete     = errors.New("not all chunks have been uploaded")
+	ErrInvalidChunkSize     = errors.New("chunk size must be greater than zero")
+	ErrChunkIndexOutOfRange = errors.New("chunk index out of range")
+	ErrFileNotOwned         = errors.New("file not found or not owned by user")
 )
 
 type InitUploadRequest struct {
@@ -27,11 +30,15 @@ type InitUploadRequest struct {
 }
 
 type InitUploadResponse struct {
-	FileID         uuid.UUID `json:"fileId"`
-	ObjectKey      string    `json:"objectKey"`
-	ChunkSize      int64     `json:"chunkSize"`
-	TotalChunks    int       `json:"totalChunks"`
-	PresignedChunk []string  `json:"presignedChunk"`
+	FileID      uuid.UUID `json:"fileId"`
+	ObjectKey   string    `json:"objectKey"`
+	ChunkSize   int64     `json:"chunkSize"`
+	TotalChunks int       `json:"totalChunks"`
+}
+
+type ChunkUploadURLResponse struct {
+	ChunkIndex int    `json:"chunkIndex"`
+	URL        string `json:"url"`
 }
 
 type ChunkCompleteRequest struct {
@@ -88,8 +95,6 @@ func (s *UploadService) InitUpload(ctx context.Context, ownerID uuid.UUID, req I
 		return nil, err
 	}
 
-	presignedChunks := make([]string, totalChunks)
-
 	for i := range totalChunks {
 		chunk := &model.FileChunk{
 			ID:         uuid.New(),
@@ -101,22 +106,43 @@ func (s *UploadService) InitUpload(ctx context.Context, ownerID uuid.UUID, req I
 		if err := s.chunkRepo.CreateChunk(ctx, chunk); err != nil {
 			return nil, err
 		}
-
-		chunkObjectKey := objectKey + "/" + strconv.Itoa(i)
-		url, err := minio.GenerateUploadURL(ctx, s.client, s.bucket, chunkObjectKey, 10*time.Minute)
-		if err != nil {
-			return nil, err
-		}
-		presignedChunks[i] = url
 	}
-
 
 	return &InitUploadResponse{
 		FileID:      fileID,
 		ObjectKey:   objectKey,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: totalChunks,
-		PresignedChunk: presignedChunks,
+	}, nil
+}
+
+func (s *UploadService) GetChunkUploadURL(ctx context.Context, ownerID, fileID uuid.UUID, chunkIndex int) (*ChunkUploadURLResponse, error) {
+	file, err := s.fileRepo.GetByIDAndOwner(ctx, fileID, ownerID)
+	if err != nil {
+		if errors.Is(err, repository.ErrFileNotFound) {
+			return nil, ErrFileNotOwned
+		}
+		return nil, err
+	}
+
+	totalChunks, err := s.chunkRepo.CountTotal(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+
+	if chunkIndex < 0 || chunkIndex >= int(totalChunks) {
+		return nil, fmt.Errorf("%w: got %d, total %d", ErrChunkIndexOutOfRange, chunkIndex, totalChunks)
+	}
+
+	chunkObjectKey := file.ObjectKey + "/" + strconv.Itoa(chunkIndex)
+	url, err := minio.GenerateUploadURL(ctx, s.client, s.bucket, chunkObjectKey, 10*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ChunkUploadURLResponse{
+		ChunkIndex: chunkIndex,
+		URL:        url,
 	}, nil
 }
 
@@ -163,5 +189,35 @@ func (s *UploadService) CompleteUpload(ctx context.Context, fileID uuid.UUID) er
 		return ErrUploadIncomplete
 	}
 
-	return s.fileRepo.UpdateStatus(ctx, fileID, model.FileStatusProcessing)
+	// Get the file record to know the object key
+	file, err := s.fileRepo.GetByID(ctx, fileID)
+	if err != nil {
+		return err
+	}
+
+	// Compose all chunk objects into a single final object
+	srcs := make([]miniogo.CopySrcOptions, int(total))
+	for i := range int(total) {
+		srcs[i] = miniogo.CopySrcOptions{
+			Bucket: s.bucket,
+			Object: file.ObjectKey + "/" + strconv.Itoa(i),
+		}
+	}
+
+	dst := miniogo.CopyDestOptions{
+		Bucket: s.bucket,
+		Object: file.ObjectKey,
+	}
+
+	if _, err := s.client.ComposeObject(ctx, dst, srcs...); err != nil {
+		return fmt.Errorf("failed to compose chunks: %w", err)
+	}
+
+	// Clean up individual chunk objects
+	for i := range int(total) {
+		chunkKey := file.ObjectKey + "/" + strconv.Itoa(i)
+		_ = s.client.RemoveObject(ctx, s.bucket, chunkKey, miniogo.RemoveObjectOptions{})
+	}
+
+	return s.fileRepo.UpdateStatus(ctx, fileID, model.FileStatusReady)
 }

@@ -71,6 +71,11 @@ func run(logger *zap.Logger) error {
 	}
 	logger.Info("connected to MinIO")
 
+	if err := pkgminio.EnsureBucketExists(ctx, minioClient, cfg.MinIO.Bucket); err != nil {
+		return err
+	}
+	logger.Info("ensured MinIO bucket exists", zap.String("bucket", cfg.MinIO.Bucket))
+
 	natsConn, err := pkgnats.NewConn(cfg.NATS.URL, logger)
 	if err != nil {
 		return err
@@ -107,6 +112,11 @@ func run(logger *zap.Logger) error {
 	e.Use(echomw.RequestID())
 	e.Use(echomw.Recover())
 	e.Use(echomw.Logger())
+	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
+		AllowOrigins: []string{"http://localhost:3000"},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.OPTIONS},
+	}))
 
 	
 
