@@ -1,0 +1,3 @@
+ALTER TABLE files
+  DROP COLUMN IF EXISTS scan_result,
+  DROP COLUMN IF EXISTS scanned_at;

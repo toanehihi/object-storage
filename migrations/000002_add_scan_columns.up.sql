@@ -1,0 +1,3 @@
+ALTER TABLE files
+  ADD COLUMN scan_result VARCHAR(20),
+  ADD COLUMN scanned_at TIMESTAMP;
