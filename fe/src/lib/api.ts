@@ -124,8 +124,6 @@ export class ApiError extends Error {
   }
 }
 
-// ───── Auth API ─────
-
 export const authApi = {
   register(data: { email: string; password: string; fullName?: string }) {
     return apiFetch<import("./types").AuthResponse>("/auth/register", {
@@ -145,8 +143,6 @@ export const authApi = {
     return apiFetch<import("./types").User>("/auth/me");
   },
 };
-
-// ───── Upload API ─────
 
 export const uploadApi = {
   init(data: import("./types").InitUploadRequest) {
@@ -182,12 +178,10 @@ export const uploadApi = {
   },
 };
 
-// ───── File API ─────
-
 export const fileApi = {
-  list(limit = 20, offset = 0) {
-    return apiFetch<import("./types").FileListResponse>(
-      `/files?limit=${limit}&offset=${offset}`
+  list(page = 1, pageSize = 20) {
+    return apiFetch<import("./types").PaginatedResponse<import("./types").FileItem>>(
+      `/files?page=${page}&pageSize=${pageSize}`
     );
   },
 

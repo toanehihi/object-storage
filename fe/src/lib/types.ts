@@ -1,11 +1,9 @@
-// ───── API Response Wrapper ─────
 export interface ApiResponse<T> {
   success: boolean;
   message?: string;
   data: T;
 }
 
-// ───── Auth ─────
 export interface User {
   id: string;
   email: string;
@@ -36,8 +34,7 @@ export interface RegisterRequest {
   fullName?: string;
 }
 
-// ───── Files ─────
-export type FileStatus = "UPLOADING" | "PROCESSING" | "READY" | "FAILED" | "DELETED";
+export type FileStatus = "UPLOADING" | "UPLOADED" | "PROCESSING" | "READY" | "FAILED" | "DELETED" | "UNSCANNED" | "INFECTED";
 
 export interface FileItem {
   id: string;
@@ -52,10 +49,17 @@ export interface FileItem {
   updatedAt: string;
 }
 
-export interface FileListResponse {
-  files: FileItem[] | null;
-  limit: number;
-  offset: number;
+export interface PageMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  nextPage?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PageMeta;
 }
 
 export interface DownloadURLResponse {
@@ -65,7 +69,6 @@ export interface DownloadURLResponse {
   expiresIn: number;
 }
 
-// ───── Upload ─────
 export interface InitUploadRequest {
   filename: string;
   size: number;

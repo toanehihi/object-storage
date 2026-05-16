@@ -150,11 +150,19 @@ func (h *UploadHandler) complete(c echo.Context) error {
 		if errors.Is(err, service.ErrUploadIncomplete) {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete upload")
+		c.Logger().Errorf("failed to complete upload: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete upload: " + err.Error())
+	}
+
+	// Fetch updated file to return correct status
+	statusResp, err := h.svc.GetStatus(c.Request().Context(), fileID)
+	finalStatus := "UPLOADED"
+	if err == nil {
+		finalStatus = statusResp.Status
 	}
 
 	return c.JSON(http.StatusOK, response.OK(CompleteUploadResponse{
 		FileID: fileID,
-		Status: "READY",
+		Status: finalStatus,
 	}, "upload complete"))
 }

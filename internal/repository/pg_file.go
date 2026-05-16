@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,11 +15,12 @@ import (
 )
 
 type PgFileRepository struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
 func NewPgFileRepository(pool *pgxpool.Pool) *PgFileRepository {
-	return &PgFileRepository{q: sqlc.New(pool)}
+	return &PgFileRepository{q: sqlc.New(pool), pool: pool}
 }
 
 func (r *PgFileRepository) CreateFile(ctx context.Context, file *model.File) error {
@@ -68,6 +70,15 @@ func (r *PgFileRepository) UpdateStatus(ctx context.Context, fileID uuid.UUID, s
 	})
 }
 
+func (r *PgFileRepository) UpdateScanResult(ctx context.Context, fileID uuid.UUID, status model.FileStatus, scanResult string, scannedAt time.Time) error {
+	return r.q.UpdateFileScanResult(ctx, sqlc.UpdateFileScanResultParams{
+		ID:         fileID,
+		Status:     string(status),
+		ScanResult: pgtype.Text{String: scanResult, Valid: scanResult != ""},
+		ScannedAt:  pgtype.Timestamp{Time: scannedAt, Valid: true},
+	})
+}
+
 func (r *PgFileRepository) SoftDelete(ctx context.Context, fileID, ownerID uuid.UUID) error {
 	return r.q.SoftDeleteFile(ctx, sqlc.SoftDeleteFileParams{
 		ID:      fileID,
@@ -92,7 +103,21 @@ func (r *PgFileRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, l
 	return files, nil
 }
 
+func (r *PgFileRepository) CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM files WHERE owner_id = $1 AND status != 'DELETED'",
+		ownerID,
+	).Scan(&count)
+	return count, err
+}
+
 func toFileModel(f sqlc.File) *model.File {
+	var scannedAt *time.Time
+	if f.ScannedAt.Valid {
+		scannedAt = &f.ScannedAt.Time
+	}
+
 	return &model.File{
 		ID:          f.ID,
 		OwnerID:     f.OwnerID,
@@ -102,6 +127,8 @@ func toFileModel(f sqlc.File) *model.File {
 		ContentType: f.ContentType.String,
 		Status:      model.FileStatus(f.Status),
 		Checksum:    f.Checksum.String,
+		ScanResult:  f.ScanResult.String,
+		ScannedAt:   scannedAt,
 		CreatedAt:   f.CreatedAt.Time,
 		UpdatedAt:   f.UpdatedAt.Time,
 	}

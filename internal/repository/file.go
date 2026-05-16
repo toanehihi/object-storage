@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,8 +17,10 @@ type FileRepository interface {
 	GetByID(ctx context.Context, fileID uuid.UUID) (*model.File, error)
 	GetByIDAndOwner(ctx context.Context, fileID, ownerID uuid.UUID) (*model.File, error)
 	UpdateStatus(ctx context.Context, fileID uuid.UUID, status model.FileStatus) error
+	UpdateScanResult(ctx context.Context, fileID uuid.UUID, status model.FileStatus, scanResult string, scannedAt time.Time) error
 	SoftDelete(ctx context.Context, fileID, ownerID uuid.UUID) error
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]*model.File, error)
+	CountByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 }
 
 type ChunkRepository interface {

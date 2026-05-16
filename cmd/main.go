@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 
 	"github.com/toanehihi/object-storage/config"
@@ -83,6 +84,23 @@ func run(logger *zap.Logger) error {
 	defer natsConn.Close()
 	logger.Info("connected to NATS")
 
+	js, err := natsConn.JetStream()
+	if err != nil {
+		return err
+	}
+
+	// Ensure stream exists here as well so the API server can publish even if worker starts later
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      "FILE_EVENTS",
+		Subjects:  []string{"file.uploaded"},
+		Retention: nats.WorkQueuePolicy,
+		Storage:   nats.FileStorage,
+	})
+	if err != nil {
+		return err
+	}
+	logger.Info("connected to NATS JetStream and ensured FILE_EVENTS stream exists")
+
 	// --- Repositories ---
 
 	userRepo := repository.NewPgUserRepository(pool)
@@ -93,7 +111,7 @@ func run(logger *zap.Logger) error {
 
 	tokenMgr := token.NewManager(cfg.JWT.Secret, cfg.JWT.Expiry)
 	authSvc := service.NewAuthService(userRepo, tokenMgr)
-	uploadSvc := service.NewUploadService(fileRepo, chunkRepo, minioClient, cfg.MinIO.Bucket)
+	uploadSvc := service.NewUploadService(fileRepo, chunkRepo, minioClient, cfg.MinIO.Bucket, js, cfg.ClamAV.MaxScanSize)
 	fileSvc := service.NewFileService(fileRepo, minioClient, cfg.MinIO.Bucket)
 
 	// --- Handlers ---
@@ -117,8 +135,6 @@ func run(logger *zap.Logger) error {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.OPTIONS},
 	}))
-
-	
 
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, response.OK(HealthResponse{

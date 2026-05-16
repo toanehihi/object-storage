@@ -43,17 +43,17 @@ CREATE TABLE IF NOT EXISTS file_chunks (
     UNIQUE(file_id, chunk_index)
 );
 
-CREATE INDEX idx_file_chunks_file_id
+CREATE INDEX IF NOT EXISTS idx_file_chunks_file_id
 ON file_chunks(file_id);
 
-CREATE INDEX idx_files_owner_id
+CREATE INDEX IF NOT EXISTS idx_files_owner_id
 ON files(owner_id);
 
-CREATE INDEX idx_files_status
+CREATE INDEX IF NOT EXISTS idx_files_status
 ON files(status);
 
-CREATE INDEX idx_files_checksum
+CREATE INDEX IF NOT EXISTS idx_files_checksum
 ON files(checksum);
 
-CREATE INDEX idx_users_email
+CREATE INDEX IF NOT EXISTS idx_users_email
 ON users(email);

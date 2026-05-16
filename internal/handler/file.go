@@ -9,17 +9,10 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/toanehihi/object-storage/internal/middleware"
-	"github.com/toanehihi/object-storage/internal/model"
 	"github.com/toanehihi/object-storage/internal/repository"
 	"github.com/toanehihi/object-storage/internal/service"
 	"github.com/toanehihi/object-storage/internal/utils/response"
 )
-
-type FileListResponse struct {
-	Files  []*model.File `json:"files"`
-	Limit  int32         `json:"limit"`
-	Offset int32         `json:"offset"`
-}
 
 type FileDeletedResponse struct {
 	FileID uuid.UUID `json:"fileId"`
@@ -44,26 +37,26 @@ func (h *FileHandler) RegisterRoutes(g *echo.Group) {
 func (h *FileHandler) list(c echo.Context) error {
 	ownerID := middleware.UserIDFromContext(c)
 
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	pageSize, _ := strconv.Atoi(c.QueryParam("pageSize"))
 
-	if limit <= 0 || limit > 100 {
-		limit = 20
+	if page <= 0 {
+		page = 1
 	}
-	if offset < 0 {
-		offset = 0
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
 	}
 
-	files, err := h.svc.ListFiles(c.Request().Context(), ownerID, int32(limit), int32(offset))
+	offset := (page - 1) * pageSize
+
+	files, total, err := h.svc.ListFiles(c.Request().Context(), ownerID, int32(pageSize), int32(offset))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list files")
 	}
 
-	return c.JSON(http.StatusOK, response.OK(FileListResponse{
-		Files:  files,
-		Limit:  int32(limit),
-		Offset: int32(offset),
-	}, ""))
+	return c.JSON(http.StatusOK, response.OK(
+		response.Paginated(files, int32(page), int32(pageSize), total), "",
+	))
 }
 
 func (h *FileHandler) metadata(c echo.Context) error {

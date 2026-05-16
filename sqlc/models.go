@@ -20,6 +20,8 @@ type File struct {
 	Checksum    pgtype.Text      `json:"checksum"`
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
 	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+	ScanResult  pgtype.Text      `json:"scan_result"`
+	ScannedAt   pgtype.Timestamp `json:"scanned_at"`
 }
 
 type FileChunk struct {

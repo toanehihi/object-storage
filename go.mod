@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
+	github.com/dutchcoders/go-clamd v0.0.0-20170520113014-b970184f4d9e
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2

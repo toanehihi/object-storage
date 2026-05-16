@@ -44,7 +44,15 @@ services:
     volumes:
       - nats_data:/data
 
+  clamav:
+    image: clamav/clamav:1.4
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+
 volumes:
   postgres_data:
   minio_data:
   nats_data:
+  clamav_data:

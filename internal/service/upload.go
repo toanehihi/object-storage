@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	miniogo "github.com/minio/minio-go/v7"
+	"github.com/nats-io/nats.go"
 
 	"github.com/toanehihi/object-storage/internal/model"
 	"github.com/toanehihi/object-storage/internal/repository"
@@ -55,19 +57,37 @@ type UploadStatusResponse struct {
 }
 
 type UploadService struct {
-	fileRepo  repository.FileRepository
-	chunkRepo repository.ChunkRepository
-	client    *miniogo.Client
-	bucket    string
+	fileRepo    repository.FileRepository
+	chunkRepo   repository.ChunkRepository
+	client      *miniogo.Client
+	bucket      string
+	js          nats.JetStreamContext
+	maxScanSize int64
 }
 
-func NewUploadService(fileRepo repository.FileRepository, chunkRepo repository.ChunkRepository, client *miniogo.Client, bucket string) *UploadService {
+func NewUploadService(
+	fileRepo repository.FileRepository,
+	chunkRepo repository.ChunkRepository,
+	client *miniogo.Client,
+	bucket string,
+	js nats.JetStreamContext,
+	maxScanSize int64,
+) *UploadService {
 	return &UploadService{
-		fileRepo:  fileRepo,
-		chunkRepo: chunkRepo,
-		client:    client,
-		bucket:    bucket,
+		fileRepo:    fileRepo,
+		chunkRepo:   chunkRepo,
+		client:      client,
+		bucket:      bucket,
+		js:          js,
+		maxScanSize: maxScanSize,
 	}
+}
+
+type FileUploadedEvent struct {
+	FileID      string `json:"file_id"`
+	ObjectKey   string `json:"object_key"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"content_type"`
 }
 
 func (s *UploadService) InitUpload(ctx context.Context, ownerID uuid.UUID, req InitUploadRequest) (*InitUploadResponse, error) {
@@ -219,5 +239,31 @@ func (s *UploadService) CompleteUpload(ctx context.Context, fileID uuid.UUID) er
 		_ = s.client.RemoveObject(ctx, s.bucket, chunkKey, miniogo.RemoveObjectOptions{})
 	}
 
-	return s.fileRepo.UpdateStatus(ctx, fileID, model.FileStatusReady)
+	// Set status to UPLOADED after successful chunk composition
+	if err := s.fileRepo.UpdateStatus(ctx, fileID, model.FileStatusUploaded); err != nil {
+		return err
+	}
+
+	// Skip scan for files exceeding the size limit
+	if file.Size > s.maxScanSize {
+		return s.fileRepo.UpdateStatus(ctx, fileID, model.FileStatusUnscanned)
+	}
+
+	// Publish scan event
+	event := FileUploadedEvent{
+		FileID:      fileID.String(),
+		ObjectKey:   file.ObjectKey,
+		Size:        file.Size,
+		ContentType: file.ContentType,
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	if _, err := s.js.Publish("file.uploaded", data); err != nil {
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	return nil
 }

@@ -14,6 +14,7 @@ type Config struct {
 	MinIO    MinIO
 	NATS     NATS
 	JWT      JWT
+	ClamAV   ClamAV
 }
 
 type Server struct {
@@ -57,6 +58,12 @@ type NATS struct {
 type JWT struct {
 	Secret string        `env:"JWT_SECRET" envDefault:"change-me-in-production"`
 	Expiry time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
+}
+
+type ClamAV struct {
+	Address     string        `env:"CLAMAV_ADDRESS" envDefault:"localhost:3310"`
+	ScanTimeout time.Duration `env:"CLAMAV_SCAN_TIMEOUT" envDefault:"2m"`
+	MaxScanSize int64         `env:"CLAMAV_MAX_SCAN_SIZE" envDefault:"104857600"`
 }
 
 func Load() (Config, error) {

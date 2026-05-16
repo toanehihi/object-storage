@@ -20,3 +20,4 @@ func Fail[T any](message string) ApiResponse[T] {
 		Message: message,
 	}
 }
+

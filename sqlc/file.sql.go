@@ -47,7 +47,7 @@ func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) error {
 }
 
 const getFileByID = `-- name: GetFileByID :one
-SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at
+SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at, scan_result, scanned_at
 FROM files
 WHERE id = $1
 `
@@ -66,12 +66,14 @@ func (q *Queries) GetFileByID(ctx context.Context, id uuid.UUID) (File, error) {
 		&i.Checksum,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScanResult,
+		&i.ScannedAt,
 	)
 	return i, err
 }
 
 const getFileByIDAndOwner = `-- name: GetFileByIDAndOwner :one
-SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at
+SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at, scan_result, scanned_at
 FROM files
 WHERE id = $1 AND owner_id = $2 AND status != 'DELETED'
 `
@@ -95,12 +97,14 @@ func (q *Queries) GetFileByIDAndOwner(ctx context.Context, arg GetFileByIDAndOwn
 		&i.Checksum,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScanResult,
+		&i.ScannedAt,
 	)
 	return i, err
 }
 
 const listFilesByOwner = `-- name: ListFilesByOwner :many
-SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at
+SELECT id, owner_id, filename, object_key, size, content_type, status, checksum, created_at, updated_at, scan_result, scanned_at
 FROM files
 WHERE owner_id = $1 AND status != 'DELETED'
 ORDER BY created_at DESC
@@ -133,6 +137,8 @@ func (q *Queries) ListFilesByOwner(ctx context.Context, arg ListFilesByOwnerPara
 			&i.Checksum,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ScanResult,
+			&i.ScannedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -156,6 +162,29 @@ type SoftDeleteFileParams struct {
 
 func (q *Queries) SoftDeleteFile(ctx context.Context, arg SoftDeleteFileParams) error {
 	_, err := q.db.Exec(ctx, softDeleteFile, arg.ID, arg.OwnerID)
+	return err
+}
+
+const updateFileScanResult = `-- name: UpdateFileScanResult :exec
+UPDATE files
+SET status = $2, scan_result = $3, scanned_at = $4, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateFileScanResultParams struct {
+	ID         uuid.UUID        `json:"id"`
+	Status     string           `json:"status"`
+	ScanResult pgtype.Text      `json:"scan_result"`
+	ScannedAt  pgtype.Timestamp `json:"scanned_at"`
+}
+
+func (q *Queries) UpdateFileScanResult(ctx context.Context, arg UpdateFileScanResultParams) error {
+	_, err := q.db.Exec(ctx, updateFileScanResult,
+		arg.ID,
+		arg.Status,
+		arg.ScanResult,
+		arg.ScannedAt,
+	)
 	return err
 }
 

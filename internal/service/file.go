@@ -44,8 +44,18 @@ func (s *FileService) Delete(ctx context.Context, fileID, ownerID uuid.UUID) err
 	return s.fileRepo.SoftDelete(ctx, fileID, ownerID)
 }
 
-func (s *FileService) ListFiles(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]*model.File, error) {
-	return s.fileRepo.ListByOwner(ctx, ownerID, limit, offset)
+func (s *FileService) ListFiles(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]*model.File, int64, error) {
+	files, err := s.fileRepo.ListByOwner(ctx, ownerID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.fileRepo.CountByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return files, total, nil
 }
 
 func (s *FileService) GetDownloadURL(ctx context.Context, fileID, ownerID uuid.UUID) (*DownloadURLResponse, error) {
@@ -54,7 +64,7 @@ func (s *FileService) GetDownloadURL(ctx context.Context, fileID, ownerID uuid.U
 		return nil, err
 	}
 
-	if file.Status != model.FileStatusReady {
+	if file.Status != model.FileStatusReady && file.Status != model.FileStatusUnscanned {
 		return nil, ErrFileNotReady
 	}
 
